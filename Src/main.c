@@ -930,7 +930,7 @@ static void MX_USART1_UART_Init(void)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
-
+  __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
 }
 
 /** 
@@ -1275,8 +1275,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 {
-	ui8_UART_flag=1;
+//    ui8_UART_flag=1;
+}
 
+void UART_IdleItCallback(void)
+{
+    ui8_UART_flag=1;
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *UartHandle)

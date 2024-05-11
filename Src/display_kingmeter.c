@@ -55,6 +55,10 @@ const uint8_t KM_901U_HANDSHAKE[64] =
 
 
 // Local function prototypes
+#if (DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_618U || DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_901U)
+static void usart_rx_read_dma_buffer(uint8_t *buf, uint8_t *msg);
+#endif
+
 #if (DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_618U)
 static void KM_618U_Service(KINGMETER_t* KM_ctx);
 #endif
@@ -139,7 +143,7 @@ void KingMeter_Init (KINGMETER_t* KM_ctx)
     KM_ctx->Tx.Error                        = KM_ERROR_NONE;
     KM_ctx->Tx.Current_x10                  = 0;
 
-    //hier fehlt der DMA-Start für das normale J-LCD....
+
 
 #if (DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_618U || DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_901U)
     if (HAL_UART_Receive_DMA(&huart1, (uint8_t *)KM_ctx->RxBuff, KM_MAX_RXBUFF) != HAL_OK)
@@ -193,6 +197,9 @@ static void KM_618U_Service(KINGMETER_t* KM_ctx)
     static uint8_t TxBuff[KM_MAX_TXBUFF];
     KM_ctx->RxState = RXSTATE_SENDTXMSG;
 
+    static uint8_t KM_Message[KM_MAX_RXBUFF];
+    usart_rx_read_dma_buffer(KM_ctx->RxBuff, KM_Message);
+
 // Send message to display
 
 
@@ -242,7 +249,7 @@ static void KM_618U_Service(KINGMETER_t* KM_ctx)
     {
 
         // Verify XOR CheckSum
-        if(KM_ctx->RxBuff[4] == (KM_ctx->RxBuff[1] ^ KM_ctx->RxBuff[2] ^ KM_ctx->RxBuff[3]))
+        if(KM_Message[4] == (KM_Message[1] ^ KM_Message[2] ^ KM_Message[3]))
         {
             KM_ctx->RxState = RXSTATE_DONE;
         }
@@ -266,15 +273,15 @@ static void KM_618U_Service(KINGMETER_t* KM_ctx)
         KM_ctx->RxState = RXSTATE_STARTCODE;
 
         // Decode PAS level - Display sets PAS-level to 0 when overspeed detected!
-        KM_ctx->Rx.AssistLevel = KM_ctx->RxBuff[1] & 0x07;
+        KM_ctx->Rx.AssistLevel = KM_Message[1] & 0x07;
 
         // Decode Headlight status
-        KM_ctx->Rx.Headlight = (KM_ctx->RxBuff[1] & 0x80) >> 7;         // KM_HEADLIGHT_OFF / KM_HEADLIGHT_ON
+        KM_ctx->Rx.Headlight = (KM_Message[1] & 0x80) >> 7;         // KM_HEADLIGHT_OFF / KM_HEADLIGHT_ON
 
 //        KM_ctx->Rx.Battery;
 
         // Decode PushAssist status
-        KM_ctx->Rx.PushAssist = (KM_ctx->RxBuff[1] & 0x10) >> 4;        // KM_PUSHASSIST_OFF / KM_PUSHASSIST_ON
+        KM_ctx->Rx.PushAssist = (KM_Message[1] & 0x10) >> 4;        // KM_PUSHASSIST_OFF / KM_PUSHASSIST_ON
 
 //        KM_ctx->Rx.PowerAssist;
 //        KM_ctx->Rx.Throttle;
@@ -282,17 +289,15 @@ static void KM_618U_Service(KINGMETER_t* KM_ctx)
 //        KM_ctx->Rx.OverSpeed;
 
         // Decode Speedlimit
-        KM_ctx->Rx.SPEEDMAX_Limit_x10 = (((KM_ctx->RxBuff[2] & 0xF8) >> 3) + 10) * 10;
+        KM_ctx->Rx.SPEEDMAX_Limit_x10 = (((KM_Message[2] & 0xF8) >> 3) + 10) * 10;
 
         // Decode Wheelsize by hashtable
-        KM_ctx->Settings.WheelSize_mm = KM_WHEELSIZE[KM_ctx->RxBuff[2] & 0x07];
+        KM_ctx->Settings.WheelSize_mm = KM_WHEELSIZE[KM_Message[2] & 0x07];
 
 //        KM_ctx->Rx.CUR_Limit_x10;
     }
 }
 #endif
-
-
 
 
 #if (DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_901U)
@@ -302,37 +307,17 @@ static void KM_618U_Service(KINGMETER_t* KM_ctx)
  ***************************************************************************************************/
 static void KM_901U_Service(KINGMETER_t* KM_ctx)
 {
-    static uint8_t i;
+    uint8_t i;
     static uint8_t j=0;
     static uint8_t first_run_flag=0;
 
 //    static uint8_t SOM_Flag = 0;
     uint16_t CheckSum;
     static uint8_t TxBuff[KM_MAX_TXBUFF];
-    static uint8_t TxCnt;
+    uint8_t TxCnt;
 
-    static uint8_t last_pointer_position;
-    static uint8_t recent_pointer_position;
-    static uint8_t Rx_message_length;
     static uint8_t KM_Message[KM_MAX_RXBUFF];
-
-    recent_pointer_position = KM_MAX_RXBUFF - DMA1_Channel5->CNDTR;
-
-    if (recent_pointer_position > last_pointer_position) {
-        Rx_message_length = recent_pointer_position - last_pointer_position;
-//        printf_("groesser %d, %d, %d \n ", recent_pointer_position, last_pointer_position, Rx_message_length);
-//        HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-        memcpy(KM_Message, KM_ctx->RxBuff+last_pointer_position, Rx_message_length);
-//        HAL_UART_Transmit(&huart3, (uint8_t *)&KM_Message, Rx_message_length, 50);
-    }
-    else {
-        Rx_message_length = recent_pointer_position + KM_MAX_RXBUFF - last_pointer_position;
-        memcpy(KM_Message, KM_ctx->RxBuff+last_pointer_position, KM_MAX_RXBUFF-last_pointer_position);
-        memcpy(KM_Message+KM_MAX_RXBUFF-last_pointer_position, KM_ctx->RxBuff, recent_pointer_position);
-//        HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-    }
-    last_pointer_position=recent_pointer_position;
-//    HAL_UART_Transmit(&huart3, (uint8_t *)&KM_Message, Rx_message_length, 50);
+    usart_rx_read_dma_buffer(KM_ctx->RxBuff, KM_Message);
 
     i=KM_Message[2];
 
@@ -347,7 +332,7 @@ static void KM_901U_Service(KINGMETER_t* KM_ctx)
         case 1:
             TxBuff[0] = 0XFD;                                       // StartCode
             TxBuff[1] = 0x5B;                                       // SrcAdd:  Controller
-            TxBuff[2] = 0xFD;                                      	// CmdCode
+            TxBuff[2] = 0xFD;                                       // CmdCode
             TxBuff[3] = 0x00;
             // FD 5B FD 00
             HAL_UART_Transmit_DMA(&huart1, (uint8_t *)&TxBuff, 4);
@@ -359,7 +344,7 @@ static void KM_901U_Service(KINGMETER_t* KM_ctx)
             // Prepare Tx message with handshake code
             TxBuff[0] = 0X3A;                                       // StartCode
             TxBuff[1] = 0x1A;                                       // SrcAdd:  Controller
-            TxBuff[2] = 0x53;                                      	// CmdCode
+            TxBuff[2] = 0x53;                                       // CmdCode
             TxBuff[3] = 0x05;                                       // Number of Databytes
             TxBuff[4] = 0x00;
             TxBuff[5] = 0x00;
@@ -577,6 +562,7 @@ static void KM_901U_Service(KINGMETER_t* KM_ctx)
 }
 #endif
 
+
 #if (DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_FISCHER_1822)
 /****************************************************************************************************
  * KM_FISCHER_1822() - Communication protocol of Fischer 1822 firmware
@@ -659,7 +645,7 @@ static void KM_FISCHER_1822(KINGMETER_t* KM_ctx)
             // Prepare Tx message with handshake code
             TxBuff[0] = 0X3A;                                       // StartCode
             TxBuff[1] = 0x1A;                                       // SrcAdd:  Controller
-            TxBuff[2] = 0x53;                                      	// CmdCode
+            TxBuff[2] = 0x53;                                       // CmdCode
             TxBuff[3] = 0x05;                                       // Number of Databytes
             TxBuff[4] = 0x00;
             TxBuff[5] = 0x00;
@@ -869,16 +855,44 @@ static void KM_FISCHER_1822(KINGMETER_t* KM_ctx)
                 }
             }
             break; //end of case 3, normal operation
-	}
+    }
 }
 #endif
 
-uint8_t lowByte(uint16_t word){
+
+#if (DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_618U || DISPLAY_TYPE == DISPLAY_TYPE_KINGMETER_901U)
+/****************************************************************************************************
+ * usart_rx_read_dma_buffer() - DMA read raw buffer in circular mode
+ *
+ ***************************************************************************************************/
+static void usart_rx_read_dma_buffer(uint8_t *buf, uint8_t *msg) {
+    static uint8_t last_pointer_position;
+    uint8_t recent_pointer_position;
+    uint8_t Rx_message_length;
+    
+    recent_pointer_position = KM_MAX_RXBUFF - DMA1_Channel5->CNDTR;
+
+    if (recent_pointer_position > last_pointer_position) {
+        Rx_message_length = recent_pointer_position - last_pointer_position;
+        memcpy(msg, buf + last_pointer_position, Rx_message_length);
+    }
+    else {
+        Rx_message_length = recent_pointer_position + KM_MAX_RXBUFF - last_pointer_position;
+        memcpy(msg, buf + last_pointer_position, KM_MAX_RXBUFF - last_pointer_position);
+        memcpy(msg + KM_MAX_RXBUFF - last_pointer_position, buf, recent_pointer_position);
+    }
+    
+    last_pointer_position = recent_pointer_position;
+}
+#endif
+
+
+uint8_t lowByte(uint16_t word) {
     return word & 0xFF;
 }
 
-uint8_t  highByte(uint16_t word){
-    return word >>8;
+uint8_t highByte(uint16_t word) {
+    return word >> 8;
 }
 
 
