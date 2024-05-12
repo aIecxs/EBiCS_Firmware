@@ -1305,11 +1305,11 @@ void kingmeter_update(void)
     if(__HAL_TIM_GET_COUNTER(&htim2) < 12000)
     {
         // Adapt wheeltime to match displayed speedo value according config.h setting
-        KM.Tx.Wheeltime_ms = (uint32_SPEED>>4); //16 kHz counter frequency, so 16 tics per ms
+        KM.Tx.Wheeltime_ms = (MS.Speed*GEAR_RATIO*PULSES_PER_REVOLUTION)>>4; //16 kHz counter frequency, so 16 tics per ms
     }
     else
     {
-        KM.Tx.Wheeltime_ms = 64000;
+//        KM.Tx.Wheeltime_ms = 64000;
     }
 
 

@@ -15,8 +15,9 @@
 //#define DISPLAY_TYPE DEBUG_SLOW_LOOP
 //#define DISPLAY_TYPE DEBUG_FAST_LOOP
 
-
-#define wheel_circumference 2.202 	//wheel circumference in m
+#define GEAR_RATIO 1
+#define PULSES_PER_REVOLUTION 30
+#define wheel_circumference 0.798 	//wheel circumference in m
 #define THROTTLE_OFFSET 1275//950//1210 			//ADC-value at closed throttle 670 for throttle, 1255 for TS
 #define THROTTLE_MAX 3015
 #define TS_COEF 800					//coefficient for torque-sensor-mode
